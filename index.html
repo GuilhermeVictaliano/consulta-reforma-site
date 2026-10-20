@@ -19,7 +19,6 @@
   </a>
   <nav class="menu" aria-label="Menu principal">
     <a href="#como">Como funciona</a>
-    <a href="#consultar" class="cta">Consultar grátis</a>
     <a href="#noticias">Notícias</a>
     <a href="#forum">Fórum</a>
     <a href="#feedback">Feedback</a>
@@ -27,16 +26,30 @@
 </header>
 
 <main>
-<!-- ================= INÍCIO ================= -->
+<!-- ================= INÍCIO + BUSCA ================= -->
 <section id="inicio" class="hero">
   <div class="wrap">
     <p class="kicker">Reforma Tributária · CBS e IBS a partir de 2027</p>
     <h1>Seus fornecedores vão gerar <span>crédito de imposto</span>?</h1>
-    <p class="lead">Com a Reforma, a empresa só desconta o imposto das compras feitas de fornecedores que geram crédito e estão em dia com a Receita. Descubra em minutos quais são os seus.</p>
-    <div class="hero-cta">
-      <a class="btn big" href="#consultar">Consultar 2 fornecedores grátis</a>
-      <a class="btn ghost big" href="#como">Como funciona</a>
-    </div>
+    <p class="lead">Digite o CNPJ do fornecedor e descubra na hora. Os 2 primeiros são grátis.</p>
+
+    <form id="busca" class="busca" novalidate>
+      <label for="cnpj" class="vh">CNPJ do fornecedor</label>
+      <div class="sbar">
+        <svg class="lupa" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><line x1="15.5" y1="15.5" x2="21" y2="21" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+        <input id="cnpj" inputmode="numeric" autocomplete="off" placeholder="Digite o CNPJ do fornecedor" enterkeyhint="search">
+        <button type="button" id="mais" class="plus" aria-label="Adicionar mais um CNPJ" title="Adicionar mais um CNPJ">+</button>
+      </div>
+      <p class="err" id="err-busca" role="alert"></p>
+      <ul id="lista" class="chips" aria-live="polite"></ul>
+      <div id="preco" class="preco hide" aria-live="polite"></div>
+      <div class="sbtns">
+        <button type="submit" class="btn big" id="go">Consultar</button>
+        <label class="btn ghost big file">Enviar lista (CSV ou TXT)<input type="file" id="arq" accept=".csv,.txt,text/csv,text/plain"></label>
+      </div>
+      <p class="hint">Use o <b>+</b> para adicionar mais de um fornecedor. Na lista, um CNPJ por linha (se quiser, com o valor comprado no ano depois de <code>;</code>).</p>
+    </form>
+
     <ul class="sem" aria-label="Legenda das cores">
       <li class="s1"><span class="ic">✓</span><b>Em dia</b> gera crédito e está regular</li>
       <li class="s2"><span class="ic">!</span><b>Atenção</b> gera crédito, mas tem pendência</li>
@@ -45,95 +58,50 @@
   </div>
 </section>
 
+<!-- ================= RESULTADO ================= -->
+<section id="resultado" class="block alt hide">
+ <div class="wrap">
+  <div id="progresso" class="card prog hide"><div class="bar"><i></i></div><p></p></div>
+  <div id="relatorio"></div>
+  <div class="actions hide" id="rel-actions">
+    <button class="btn big" type="button" id="baixar">Baixar relatório</button>
+    <button class="btn ghost" type="button" id="imprimir">Imprimir ou salvar em PDF</button>
+    <button class="btn ghost" type="button" id="nova">Nova consulta</button>
+  </div>
+  <p class="mu small" id="aviso-rel"></p>
+ </div>
+</section>
+
 <!-- ================= COMO FUNCIONA ================= -->
 <section id="como" class="wrap block">
   <h2>Como funciona</h2>
   <ol class="steps">
-    <li><span>1</span><b>Informe seu contato</b><p>E-mail e WhatsApp, para receber o relatório.</p></li>
-    <li><span>2</span><b>Adicione os fornecedores</b><p>Digite os CNPJs ou envie uma lista em CSV ou TXT. Os 2 primeiros são grátis.</p></li>
-    <li><span>3</span><b>Nós verificamos</b><p>Situação na Receita, Simples Nacional, MEI e certidão federal de cada fornecedor.</p></li>
-    <li><span>4</span><b>Receba o relatório</b><p>Baixe na hora e receba também por e-mail, com o crédito estimado e o que fazer.</p></li>
+    <li><span>1</span><b>Digite o CNPJ</b><p>No campo de busca lá em cima. Use o <b>+</b> para mais de um fornecedor, ou envie uma lista em CSV ou TXT.</p></li>
+    <li><span>2</span><b>Informe seu contato</b><p>E-mail e WhatsApp, e aceite os termos. Os 2 primeiros CNPJs são grátis; acima disso, mostramos o valor antes.</p></li>
+    <li><span>3</span><b>Veja o resultado</b><p>Na hora: situação na Receita, Simples, MEI e o crédito estimado. Baixe o relatório para guardar.</p></li>
   </ol>
-</section>
-
-<!-- ================= CONSULTAR ================= -->
-<section id="consultar" class="block alt">
- <div class="wrap">
-  <h2>Consultar fornecedores</h2>
-  <ol class="wiz" aria-label="Etapas">
-    <li data-step="1" class="on">Contato</li><li data-step="2">Fornecedores</li><li data-step="3">Relatório</li>
-  </ol>
-
-  <!-- Etapa 1 -->
-  <form id="f-contato" class="card step" data-step="1" novalidate>
-    <h3>1. Seu contato</h3>
-    <label>E-mail<input type="email" id="email" autocomplete="email" placeholder="voce@empresa.com.br" required></label>
-    <label>WhatsApp<input type="tel" id="whats" autocomplete="tel" inputmode="tel" placeholder="(11) 91234-5678" required></label>
-    <label class="chk"><input type="checkbox" id="lgpd" required> <span>Concordo em receber o relatório e contato sobre a consulta, conforme a <a href="#privacidade">política de privacidade</a>.</span></label>
-    <p class="err" id="err1" role="alert"></p>
-    <button class="btn big" type="submit">Continuar</button>
-  </form>
-
-  <!-- Etapa 2 -->
-  <div id="f-forn" class="card step hide" data-step="2">
-    <h3>2. Fornecedores</h3>
-    <p class="mu">Os <b>2 primeiros são grátis</b>. Informe também, se souber, quanto você compra de cada um por ano: assim calculamos o crédito em reais.</p>
-    <div class="tabs" role="tablist">
-      <button type="button" class="on" data-tab="manual" role="tab" aria-selected="true">Digitar CNPJ</button>
-      <button type="button" data-tab="arquivo" role="tab" aria-selected="false">Enviar arquivo</button>
-    </div>
-    <form id="add-manual" class="tabp" data-tab="manual" novalidate>
-      <div class="row">
-        <label class="grow">CNPJ do fornecedor<input id="cnpj" inputmode="numeric" placeholder="00.000.000/0000-00" autocomplete="off"></label>
-        <label>Compras por ano (R$) <small>opcional</small><input id="valor" inputmode="decimal" placeholder="Ex.: 120.000,00" autocomplete="off"></label>
-      </div>
-      <button class="btn" type="submit">Adicionar</button>
-    </form>
-    <div class="tabp hide" data-tab="arquivo">
-      <label class="drop" id="drop"><input type="file" id="arq" accept=".csv,.txt,text/csv,text/plain">
-        <b>Escolha um arquivo CSV ou TXT</b><span>Um CNPJ por linha. Se quiser, o valor comprado no ano depois de ponto e vírgula.<br><code>12.345.678/0001-90;150000,00</code></span></label>
-    </div>
-    <p class="err" id="err2" role="alert"></p>
-    <ul id="lista" class="lista" aria-live="polite"></ul>
-    <div id="paywall" class="pay hide"></div>
-    <div class="actions">
-      <button class="btn ghost" type="button" data-back="1">Voltar</button>
-      <button class="btn big" type="button" id="go-consulta" disabled>Consultar agora</button>
-    </div>
-  </div>
-
-  <!-- Etapa 3 -->
-  <div id="f-rel" class="step hide" data-step="3">
-    <div id="progresso" class="card prog hide"><div class="bar"><i></i></div><p></p></div>
-    <div id="relatorio"></div>
-    <div class="actions hide" id="rel-actions">
-      <button class="btn big" type="button" id="baixar">Baixar relatório</button>
-      <button class="btn ghost" type="button" id="imprimir">Imprimir ou salvar em PDF</button>
-      <button class="btn ghost" type="button" id="nova">Nova consulta</button>
-    </div>
-    <p class="mu small" id="aviso-email"></p>
-  </div>
- </div>
+  <p class="mu small">Sua consulta fica só no seu navegador. Ao fechar a página, ela é apagada.</p>
 </section>
 
 <!-- ================= NOTÍCIAS ================= -->
-<section id="noticias" class="wrap block">
+<section id="noticias" class="block alt">
+ <div class="wrap">
   <h2>Notícias da Reforma</h2>
   <p class="mu">Todo dia, as notícias mais importantes sobre a Reforma Tributária e a área contábil, selecionadas de fontes confiáveis e revisadas pela nossa equipe antes de publicar.</p>
   <div class="soon"><b>Em breve</b><span>Estamos preparando a seleção diária de notícias.</span></div>
-</section>
-
-<!-- ================= FÓRUM ================= -->
-<section id="forum" class="block alt">
- <div class="wrap">
-  <h2>Fórum</h2>
-  <p class="mu">Um espaço para empresários e contadores trocarem experiências sobre a Reforma: crédito, fornecedores, Simples Nacional, split payment e mais.</p>
-  <div class="soon"><b>Em breve</b><span>O fórum vai abrir junto com o cadastro de usuários.</span></div>
  </div>
 </section>
 
+<!-- ================= FÓRUM ================= -->
+<section id="forum" class="wrap block">
+  <h2>Fórum</h2>
+  <p class="mu">Um espaço para empresários e contadores trocarem experiências sobre a Reforma: crédito, fornecedores, Simples Nacional, split payment e mais.</p>
+  <div class="soon"><b>Em breve</b><span>O fórum vai abrir junto com o cadastro de usuários.</span></div>
+</section>
+
 <!-- ================= FEEDBACK ================= -->
-<section id="feedback" class="wrap block">
+<section id="feedback" class="block alt">
+ <div class="wrap">
   <h2>Feedback</h2>
   <p class="mu">O Consulta Reforma está nascendo agora. Conte o que achou, o que faltou ou o que podemos melhorar.</p>
   <form id="f-feedback" class="card" novalidate>
@@ -150,24 +118,45 @@
     <button class="btn" type="submit">Enviar feedback</button>
     <p class="ok hide" id="ok-fb" role="status"></p>
   </form>
+ </div>
 </section>
 
-<!-- ================= PRIVACIDADE ================= -->
-<section id="privacidade" class="block alt">
- <div class="wrap">
-  <h2>Privacidade</h2>
-  <p>Usamos seu e-mail e WhatsApp só para enviar o relatório e falar sobre a sua consulta. Os CNPJs consultados são de empresas, e as informações vêm de bases públicas da Receita Federal. Não vendemos nem compartilhamos seus dados. Para pedir a exclusão dos seus dados, use o formulário de feedback.</p>
-  <p class="mu small">Os valores de crédito são estimativas, com a alíquota da CBS prevista para 2027 (cerca de 8,8%), que ainda pode mudar. Este relatório não substitui a orientação do seu contador.</p>
- </div>
+<!-- ================= TERMOS E PRIVACIDADE ================= -->
+<section id="termos" class="wrap block">
+  <h2>Termos de uso e privacidade</h2>
+  <ul class="termos">
+    <li><b>O que é a consulta.</b> Mostramos, com base em dados públicos da Receita Federal, se as compras de cada fornecedor tendem a gerar crédito de CBS/IBS na Reforma Tributária.</li>
+    <li><b>Estimativa.</b> O crédito usa a alíquota da CBS prevista para 2027 (cerca de 8,8%), que ainda pode mudar, sobre o valor de compras que você informar. Não separa produtos com alíquota reduzida. Não substitui a orientação do seu contador.</li>
+    <li><b>Seus dados.</b> A consulta acontece no seu navegador. Os CNPJs são enviados apenas à base pública de CNPJ (BrasilAPI) para buscar a situação de cada empresa. Nesta versão, não gravamos sua consulta, seu e-mail ou seu WhatsApp: ao fechar a página, tudo é apagado. Baixe o relatório para guardar.</li>
+    <li><b>Grátis e pago.</b> Os 2 primeiros CNPJs de cada consulta são grátis. Acima disso, o valor aparece antes de você confirmar.</li>
+  </ul>
 </section>
 </main>
 
 <footer class="foot">
   <div class="wrap">
     <span class="brand sm"><img src="assets/logo-icone.svg" alt="" width="24" height="24"> Consulta <b>Reforma</b></span>
-    <span>© 2026 · Informação para decisões de compra na Reforma Tributária</span>
+    <span>© 2026 · <a href="#termos">Termos e privacidade</a></span>
   </div>
 </footer>
+
+<!-- ================= POP-UP DE CONTATO ================= -->
+<dialog id="modal" aria-labelledby="m-tit">
+  <form id="f-contato" method="dialog" novalidate>
+    <button type="button" class="x" id="m-fechar" aria-label="Fechar">×</button>
+    <h3 id="m-tit">Antes de ver o resultado</h3>
+    <p class="mu" id="m-sub"></p>
+    <label>E-mail<input type="email" id="email" autocomplete="email" placeholder="voce@empresa.com.br"></label>
+    <label>WhatsApp<input type="tel" id="whats" autocomplete="tel" inputmode="tel" placeholder="(11) 91234-5678"></label>
+    <label class="chk"><input type="checkbox" id="lgpd"> <span>Li e concordo com os <a href="#termos" id="m-termos">termos de uso e privacidade</a>.</span></label>
+    <div id="m-preco" class="preco hide"></div>
+    <p class="err" id="err-m" role="alert"></p>
+    <div class="m-btns">
+      <button class="btn big" type="submit" id="m-ok">Ver resultado</button>
+      <button class="btn ghost hide" type="button" id="m-pagar" disabled>Pagar e consultar todos · em breve</button>
+    </div>
+  </form>
+</dialog>
 
 <script src="assets/app.js"></script>
 </body>

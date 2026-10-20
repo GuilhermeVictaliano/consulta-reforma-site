@@ -3,15 +3,19 @@
 
 // ---------------------------------------------------------------
 // Configuração
-// api vazio = modo demonstração: a situação na Receita, o Simples e o MEI
-// são consultados de verdade (BrasilAPI); a certidão federal, o pagamento,
-// o envio por e-mail e o feedback dependem do servidor e ficam desligados.
+// O site roda só no GitHub Pages: tudo acontece no navegador e nada é gravado.
+// Situação na Receita, Simples e MEI vêm da BrasilAPI (pública e grátis).
+// api vazio = sem servidor: sem certidão automática, pagamento, e-mail ou feedback gravado.
+// precoPorCnpj: valor de EXEMPLO, até o preço ser definido.
 // ---------------------------------------------------------------
 var CONFIG = {
   gratis: 2,
+  precoPorCnpj: 4.90,
+  precoDefinido: false,
   cbs: 0.088,
   api: '',
-  brasilapi: 'https://brasilapi.com.br/api/cnpj/v1/'
+  brasilapi: 'https://brasilapi.com.br/api/cnpj/v1/',
+  certidaoReceita: 'https://servicos.receitafederal.gov.br/servico/certidoes'
 };
 
 var LOGO = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="40" height="40" aria-hidden="true">' +
@@ -23,7 +27,8 @@ var D = document;
 function $(s, c) { return (c || D).querySelector(s); }
 function $$(s, c) { return Array.prototype.slice.call((c || D).querySelectorAll(s)); }
 
-var st = { email: '', whats: '', itens: [], res: [], quando: null };
+// Estado só em memória: some ao fechar ou recarregar a página.
+var st = { email: '', whats: '', itens: [], res: [], quando: null, faltaram: 0 };
 
 // ---------------------------------------------------------------
 // Utilidades
@@ -75,47 +80,21 @@ function num(s) {
   var v = parseFloat(s);
   return isFinite(v) && v >= 0 ? v : null;
 }
-
-// ---------------------------------------------------------------
-// Assistente (etapas)
-// ---------------------------------------------------------------
-function irPara(n) {
-  $$('.step').forEach(function (el) { el.classList.toggle('hide', el.getAttribute('data-step') !== String(n)); });
-  $$('.wiz li').forEach(function (li) {
-    var k = +li.getAttribute('data-step');
-    li.classList.toggle('on', k === n);
-    li.classList.toggle('done', k < n);
-  });
-  $('#consultar').scrollIntoView({ block: 'start' });
+function mascara(d) {
+  var partes = [2, 3, 3, 4, 2], sep = ['', '.', '.', '/', '-'], out = '', k = 0;
+  for (var i = 0; i < partes.length && k < d.length; i++) { out += sep[i] + d.slice(k, k + partes[i]); k += partes[i]; }
+  return out;
 }
-$$('[data-back]').forEach(function (b) { b.addEventListener('click', function () { irPara(+b.getAttribute('data-back')); }); });
 
-// Etapa 1 - contato
-$('#f-contato').addEventListener('submit', function (ev) {
-  ev.preventDefault();
-  var email = $('#email').value.trim(), w = dig($('#whats').value), err = $('#err1');
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { err.textContent = 'Confira o e-mail.'; $('#email').focus(); return; }
-  if (w.length === 10 || w.length === 11) w = '55' + w;
-  if (!/^55\d{10,11}$/.test(w)) { err.textContent = 'Confira o WhatsApp, com DDD.'; $('#whats').focus(); return; }
-  if (!$('#lgpd').checked) { err.textContent = 'Para continuar, marque a concordância.'; return; }
-  err.textContent = '';
-  st.email = email; st.whats = w;
-  irPara(2);
-});
-
-// Etapa 2 - fornecedores
-$$('.tabs button').forEach(function (b) {
-  b.addEventListener('click', function () {
-    var t = b.getAttribute('data-tab');
-    $$('.tabs button').forEach(function (x) { x.classList.toggle('on', x === b); x.setAttribute('aria-selected', x === b); });
-    $$('.tabp').forEach(function (p) { p.classList.toggle('hide', p.getAttribute('data-tab') !== t); });
-  });
-});
+// ---------------------------------------------------------------
+// Busca: CNPJs digitados (+) ou por arquivo
+// ---------------------------------------------------------------
+var inp = $('#cnpj'), errB = $('#err-busca');
 
 function adicionar(raw, valor) {
   var d = dig(raw);
-  if (d.length === 14 && !cnpjValido(d)) return 'CNPJ inválido: ' + fmtDoc(d);
-  if (d.length === 11 && !cpfValido(d)) return 'CPF inválido: ' + fmtDoc(d);
+  if (d.length === 14 && !cnpjValido(d)) return 'CNPJ inválido: ' + fmtDoc(d) + '. Confira os números.';
+  if (d.length === 11 && !cpfValido(d)) return 'CPF inválido: ' + fmtDoc(d) + '.';
   if (d.length !== 14 && d.length !== 11) return 'Digite um CNPJ com 14 números.';
   var ex = st.itens.filter(function (i) { return i.doc === d; })[0];
   if (ex) { if (valor != null) ex.valor = valor; return null; }
@@ -123,18 +102,21 @@ function adicionar(raw, valor) {
   return null;
 }
 
-$('#cnpj').addEventListener('input', function (e) {
-  var d = dig(e.target.value).slice(0, 14), partes = [2, 3, 3, 4, 2], sep = ['', '.', '.', '/', '-'], out = '', k = 0;
-  for (var i = 0; i < partes.length && k < d.length; i++) { out += sep[i] + d.slice(k, k + partes[i]); k += partes[i]; }
-  e.target.value = out;
-});
-
-$('#add-manual').addEventListener('submit', function (ev) {
-  ev.preventDefault();
-  var e = adicionar($('#cnpj').value, num($('#valor').value));
-  $('#err2').textContent = e || '';
-  if (!e) { $('#cnpj').value = ''; $('#valor').value = ''; $('#cnpj').focus(); }
+// adiciona o que estiver digitado; devolve false se havia algo inválido
+function pegarDigitado() {
+  if (!dig(inp.value)) return true;
+  var e = adicionar(inp.value, null);
+  errB.textContent = e || '';
+  if (e) { inp.focus(); return false; }
+  inp.value = '';
   desenharLista();
+  return true;
+}
+
+inp.addEventListener('input', function () { inp.value = mascara(dig(inp.value).slice(0, 14)); errB.textContent = ''; });
+$('#mais').addEventListener('click', function () {
+  if (!dig(inp.value)) { errB.textContent = 'Digite um CNPJ e toque no + para adicionar outro.'; inp.focus(); return; }
+  if (pegarDigitado()) inp.focus();
 });
 
 var RE_DOC = /(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}|\d{3}\.\d{3}\.\d{3}-\d{2}|\d{14}|\d{11})/;
@@ -150,47 +132,100 @@ function lerTexto(txt) {
   var msg = '';
   if (!ok && !ruins.length) msg = 'Não encontramos nenhum CNPJ no arquivo.';
   else if (ruins.length) msg = ruins.length + ' número(s) inválido(s) ignorado(s): ' + ruins.slice(0, 3).join(', ') + (ruins.length > 3 ? '…' : '');
-  $('#err2').textContent = msg;
+  errB.textContent = msg;
   desenharLista();
 }
-function lerArquivo(f) {
+$('#arq').addEventListener('change', function (e) {
+  var f = e.target.files[0];
   if (!f) return;
-  if (f.size > 2e6) { $('#err2').textContent = 'Arquivo muito grande (máximo 2 MB).'; return; }
+  if (f.size > 2e6) { errB.textContent = 'Arquivo muito grande (máximo 2 MB).'; return; }
   var r = new FileReader();
-  r.onload = function () { lerTexto(String(r.result)); $('#arq').value = ''; };
+  r.onload = function () { lerTexto(String(r.result)); e.target.value = ''; };
   r.readAsText(f, /\.csv$/i.test(f.name) ? 'ISO-8859-1' : 'UTF-8');
+});
+
+function calcPreco(n) {
+  var extra = Math.max(0, n - CONFIG.gratis);
+  return { extra: extra, total: extra * CONFIG.precoPorCnpj };
 }
-$('#arq').addEventListener('change', function (e) { lerArquivo(e.target.files[0]); });
-var drop = $('#drop');
-['dragenter', 'dragover'].forEach(function (t) { drop.addEventListener(t, function (e) { e.preventDefault(); drop.classList.add('over'); }); });
-['dragleave', 'drop'].forEach(function (t) { drop.addEventListener(t, function (e) { e.preventDefault(); drop.classList.remove('over'); }); });
-drop.addEventListener('drop', function (e) { lerArquivo(e.dataTransfer.files[0]); });
+function htmlPreco(n) {
+  var p = calcPreco(n);
+  if (!p.extra) return '';
+  return 'Você tem <b>' + n + ' CNPJs</b>: ' + CONFIG.gratis + ' grátis + ' + p.extra + ' × ' + brl(CONFIG.precoPorCnpj) +
+    '<span class="tot">Total: ' + brl(p.total) + '</span>' +
+    (CONFIG.precoDefinido ? '' : '<small>Valor de exemplo: o preço ainda está sendo definido.</small>');
+}
 
 function desenharLista() {
-  var ul = $('#lista'), n = st.itens.length, g = CONFIG.gratis;
-  ul.innerHTML = st.itens.map(function (it, i) {
-    return '<li><div class="d"><b>' + fmtDoc(it.doc) + '</b><small>' +
-      (it.valor != null ? 'Compras por ano: ' + brl(it.valor) : 'Sem valor de compras') + '</small></div>' +
+  var n = st.itens.length, g = CONFIG.gratis;
+  $('#lista').innerHTML = st.itens.map(function (it, i) {
+    return '<li><span class="doc">' + fmtDoc(it.doc) + '</span>' +
+      '<label class="val">Compras/ano R$<input inputmode="decimal" data-i="' + i + '" placeholder="opcional" value="' +
+      (it.valor != null ? it.valor.toLocaleString('pt-BR') : '') + '" aria-label="Valor comprado no ano de ' + fmtDoc(it.doc) + ' (opcional)"></label>' +
       '<span class="tag ' + (i < g ? 'free">Grátis' : 'paid">Pago') + '</span>' +
       '<button class="rm" type="button" data-i="' + i + '" aria-label="Remover ' + fmtDoc(it.doc) + '">×</button></li>';
   }).join('');
-  var pay = $('#paywall');
-  if (n > g) {
-    pay.classList.remove('hide');
-    pay.innerHTML = '<b>Você adicionou ' + n + ' fornecedores.</b> Os ' + g + ' primeiros são grátis. ' +
-      'Para consultar ' + (n - g === 1 ? 'o outro' : 'os outros ' + (n - g)) + ', a consulta é paga.' +
-      (CONFIG.api ? '' : '<br>O pagamento online está sendo ativado. Por enquanto, consultamos os ' + g + ' grátis.') +
-      '<br><button class="btn" type="button" disabled>Pagar e consultar todos · em breve</button>';
-  } else pay.classList.add('hide');
-  var b = $('#go-consulta');
-  b.disabled = !n;
-  b.textContent = n > g ? 'Consultar os ' + g + ' grátis' : 'Consultar agora';
+  var pr = $('#preco'), h = htmlPreco(n);
+  pr.innerHTML = h;
+  pr.classList.toggle('hide', !h);
+  $('#go').textContent = n > 1 ? 'Consultar ' + n + ' fornecedores' : 'Consultar';
 }
 $('#lista').addEventListener('click', function (e) {
   var b = e.target.closest('.rm');
   if (!b) return;
   st.itens.splice(+b.getAttribute('data-i'), 1);
   desenharLista();
+});
+$('#lista').addEventListener('input', function (e) {
+  var i = e.target.getAttribute('data-i');
+  if (i != null && st.itens[i]) st.itens[i].valor = num(e.target.value);
+});
+
+// ---------------------------------------------------------------
+// Pop-up de contato e termos
+// ---------------------------------------------------------------
+var modal = $('#modal');
+function abrirModal() {
+  var n = st.itens.length, g = CONFIG.gratis, p = calcPreco(n);
+  $('#m-sub').textContent = n > g
+    ? 'Os ' + g + ' primeiros CNPJs são grátis. Informe seu contato para ver o resultado.'
+    : 'Informe seu contato para ver o resultado ' + (n > 1 ? 'dos ' + n + ' CNPJs' : 'do CNPJ') + ', grátis.';
+  var mp = $('#m-preco');
+  mp.innerHTML = htmlPreco(n);
+  mp.classList.toggle('hide', !p.extra);
+  $('#m-ok').textContent = p.extra ? 'Ver os ' + g + ' grátis' : 'Ver resultado';
+  var pg = $('#m-pagar');
+  pg.classList.toggle('hide', !p.extra);
+  pg.textContent = 'Pagar ' + brl(p.total) + ' e consultar todos' + (CONFIG.api ? '' : ' · em breve');
+  pg.disabled = !CONFIG.api;
+  $('#err-m').textContent = '';
+  if (st.email) { $('#email').value = st.email; $('#whats').value = st.whats; $('#lgpd').checked = true; }
+  if (typeof modal.showModal === 'function') modal.showModal(); else modal.setAttribute('open', '');
+  setTimeout(function () { (st.email ? $('#m-ok') : $('#email')).focus(); }, 30);
+}
+function fecharModal() { if (modal.close) modal.close(); else modal.removeAttribute('open'); }
+$('#m-fechar').addEventListener('click', fecharModal);
+$('#m-termos').addEventListener('click', function () { fecharModal(); });
+modal.addEventListener('click', function (e) { if (e.target === modal) fecharModal(); });
+
+$('#busca').addEventListener('submit', function (ev) {
+  ev.preventDefault();
+  if (!pegarDigitado()) return;
+  if (!st.itens.length) { errB.textContent = 'Digite o CNPJ do fornecedor.'; inp.focus(); return; }
+  errB.textContent = '';
+  abrirModal();
+});
+
+$('#f-contato').addEventListener('submit', function (ev) {
+  ev.preventDefault();
+  var email = $('#email').value.trim(), w = dig($('#whats').value), err = $('#err-m');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { err.textContent = 'Confira o e-mail.'; $('#email').focus(); return; }
+  if (w.length === 10 || w.length === 11) w = '55' + w;
+  if (!/^55\d{10,11}$/.test(w)) { err.textContent = 'Confira o WhatsApp, com DDD.'; $('#whats').focus(); return; }
+  if (!$('#lgpd').checked) { err.textContent = 'Para continuar, aceite os termos.'; return; }
+  st.email = email; st.whats = w;
+  fecharModal();
+  consultar();
 });
 
 // ---------------------------------------------------------------
@@ -219,7 +254,7 @@ var SIT = {
   1: { ic: '✓', st: 'Em dia', acao: 'Gera crédito e está regular. Pode continuar comprando normalmente.' },
   2: { ic: '!', st: 'Atenção', acao: 'Gera crédito, mas a Receita não emitiu a certidão federal. Peça ao fornecedor a certidão negativa de débitos (CND). Sem ela, o crédito fica em risco.' },
   3: { ic: '✕', st: 'Não gera crédito', acao: 'Comprar deste fornecedor não dá direito a crédito integral. Avalie trocar por um fornecedor que gere crédito ou negociar um preço menor.' },
-  0: { ic: '?', st: 'Gera crédito · certidão em verificação', acao: 'Fornecedor fora do Simples: as compras dele geram crédito. A verificação automática da certidão federal está sendo ativada; até lá, vale pedir ao fornecedor a certidão negativa de débitos (CND).' }
+  0: { ic: '✓', st: 'Gera crédito · confira a certidão', acao: 'As compras deste fornecedor geram crédito. Para saber se ele está em dia com a Receita, emita a certidão federal dele, grátis, no site da Receita. Se a Receita não emitir, o crédito fica em risco.' }
 };
 var SITCAD = { BAIXADA: 'encerrado (baixado)', INAPTA: 'irregular (inapto)', SUSPENSA: 'suspenso', NULA: 'anulado' };
 
@@ -245,7 +280,11 @@ function classificar(it, d) {
   if (mei) r.det.push(['MEI', 'Sim, desde ' + dataBr(d.data_opcao_pelo_mei)]);
   var reg = (d.regime_tributario || []).slice(-1)[0];
   if (reg && reg.forma_de_tributacao) r.det.push(['Último regime declarado', reg.forma_de_tributacao.charAt(0) + reg.forma_de_tributacao.slice(1).toLowerCase() + ' (' + reg.ano + ')']);
-  if (d.identificador_matriz_filial === 2) r.det.push(['Filial', 'A certidão federal é a da matriz, CNPJ ' + fmtDoc(matrizDe(it.doc))]);
+  r.certDoc = it.doc;
+  if (d.identificador_matriz_filial === 2) {
+    r.certDoc = matrizDe(it.doc);
+    r.det.push(['Filial', 'A certidão federal é a da matriz, CNPJ ' + fmtDoc(r.certDoc)]);
+  }
 
   if (sc !== 'ATIVA') { r.sit = 3; r.motivo = 'CNPJ ' + (SITCAD[sc] || sc.toLowerCase()) + ' na Receita'; }
   else if (mei) { r.sit = 3; r.motivo = 'Microempreendedor individual (MEI)'; }
@@ -256,15 +295,16 @@ function classificar(it, d) {
   return r;
 }
 
-$('#go-consulta').addEventListener('click', function () {
+function consultar() {
   var lote = st.itens.slice(0, CONFIG.gratis);
-  if (!lote.length) return;
-  irPara(3);
-  var pg = $('#progresso'), bar = $('.bar i', pg), txt = $('p', pg);
+  st.faltaram = st.itens.length - lote.length;
+  var sec = $('#resultado'), pg = $('#progresso'), bar = $('.bar i', pg), txt = $('p', pg);
+  sec.classList.remove('hide');
   pg.classList.remove('hide');
   $('#relatorio').innerHTML = '';
   $('#rel-actions').classList.add('hide');
-  $('#aviso-email').textContent = '';
+  $('#aviso-rel').textContent = '';
+  sec.scrollIntoView({ block: 'start' });
   st.res = [];
   var i = 0;
   (function prox() {
@@ -284,12 +324,12 @@ $('#go-consulta').addEventListener('click', function () {
       setTimeout(prox, 350);
     });
   })();
-});
+}
 
 // ---------------------------------------------------------------
 // Relatório
 // ---------------------------------------------------------------
-function htmlRelatorio(res, quando) {
+function htmlRelatorio(res, quando, faltaram) {
   var cont = { 1: 0, 2: 0, 3: 0, 0: 0, x: 0 }, ok = 0, risco = 0, perde = 0, temValor = false;
   res.forEach(function (r) {
     cont[r.sit]++;
@@ -307,17 +347,17 @@ function htmlRelatorio(res, quando) {
     (cont[2] ? '<div class="kpi" style="--c:var(--y)"><b>' + cont[2] + '</b><small>com pendência</small></div>' : '') +
     '<div class="kpi" style="--c:var(--r)"><b>' + cont[3] + '</b><small>não geram crédito</small></div>';
   if (temValor) {
-    h += '<div class="kpi" style="--c:var(--g)"><b>' + brl(ok) + '</b><small>crédito estimado por ano' + (cont[0] ? ' (a confirmar com a certidão)' : '') + '</small></div>' +
+    h += '<div class="kpi" style="--c:var(--g)"><b>' + brl(ok) + '</b><small>crédito estimado por ano' + (cont[0] ? ' (confira as certidões)' : '') + '</small></div>' +
       (risco ? '<div class="kpi" style="--c:var(--y)"><b>' + brl(risco) + '</b><small>crédito em risco por ano</small></div>' : '') +
       '<div class="kpi" style="--c:var(--r)"><b>' + brl(perde) + '</b><small>crédito que você deixa de ter por ano</small></div>';
   }
   h += '</div>';
+  if (faltaram) h += '<p class="aprox no-print">' + faltaram + ' CNPJ(s) da sua lista não entraram nesta consulta grátis. Eles serão consultados quando o pagamento estiver disponível.</p>';
 
   var ordem = { 3: 0, 2: 1, 0: 2, 1: 3, x: 4 };
   res.slice().sort(function (a, b) { return ordem[a.sit] - ordem[b.sit] || (b.valor || 0) - (a.valor || 0); }).forEach(function (r) {
-    var s = r.sit === 'x' ? 0 : r.sit, inf = SIT[s];
-    var stx = r.sit === 'x' ? 'Não consultado' : inf.st;
-    var acao = r.sit === 'x' ? r.motivo : inf.acao;
+    var s = r.sit === 'x' ? 's0' : 's' + r.sit, inf = SIT[r.sit === 'x' ? 0 : r.sit];
+    var ic = r.sit === 'x' ? '?' : inf.ic, stx = r.sit === 'x' ? 'Não consultado' : inf.st, acao = r.sit === 'x' ? r.motivo : inf.acao;
     var dl = [['CNPJ/CPF', fmtDoc(r.doc)]];
     if (r.fantasia) dl.push(['Nome fantasia', r.fantasia]);
     if (r.local) dl.push(['Cidade', r.local]);
@@ -330,9 +370,12 @@ function htmlRelatorio(res, quando) {
       else if (r.sit === 2) dl.push(['Crédito em risco', c + ' por ano']);
       else if (r.sit !== 'x') dl.push(['Crédito estimado', c + ' por ano']);
     }
-    h += '<article class="fc s' + s + '"><div class="fc-h"><span class="ic">' + inf.ic + '</span><div class="t"><b>' + esc(r.nome) + '</b>' +
+    var cert = r.sit === 0
+      ? '<p class="no-print"><a class="btn sm" href="' + CONFIG.certidaoReceita + '" target="_blank" rel="noopener">Emitir a certidão no site da Receita ›</a> <span class="mu small">Use o CNPJ ' + fmtDoc(r.certDoc) + '</span></p>'
+      : '';
+    h += '<article class="fc ' + (r.sit === 0 ? 's1' : s) + '"><div class="fc-h"><span class="ic">' + ic + '</span><div class="t"><b>' + esc(r.nome) + '</b>' +
       '<span class="st">' + esc(stx) + '</span></div></div>' +
-      '<p class="ac">' + esc(acao) + '</p>' + (r.nota ? '<p class="mu">' + esc(r.nota) + '</p>' : '') +
+      '<p class="ac">' + esc(acao) + '</p>' + cert + (r.nota ? '<p class="mu">' + esc(r.nota) + '</p>' : '') +
       '<dl>' + dl.map(function (x) { return '<dt>' + esc(x[0]) + '</dt><dd>' + esc(x[1]) + '</dd>'; }).join('') + '</dl></article>';
   });
 
@@ -343,12 +386,10 @@ function htmlRelatorio(res, quando) {
 }
 
 function mostrarRelatorio() {
-  $('#relatorio').innerHTML = htmlRelatorio(st.res, st.quando);
+  $('#relatorio').innerHTML = htmlRelatorio(st.res, st.quando, st.faltaram);
   $('#rel-actions').classList.remove('hide');
-  $('#aviso-email').textContent = CONFIG.api
-    ? 'Também enviamos este relatório para ' + st.email + '.'
-    : 'Na versão final, este relatório também será enviado para ' + st.email + '. Nesta demonstração, use o botão Baixar relatório.';
-  $('#consultar').scrollIntoView({ block: 'start' });
+  $('#aviso-rel').textContent = 'Esta consulta não fica guardada: ao fechar a página, ela é apagada. Use Baixar relatório para guardar uma cópia.';
+  $('#resultado').scrollIntoView({ block: 'start' });
 }
 
 function cssDaPagina() {
@@ -364,7 +405,7 @@ function cssDaPagina() {
 $('#baixar').addEventListener('click', function () {
   var doc = '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">' +
     '<title>Consulta Reforma · relatório de fornecedores</title><style>' + cssDaPagina() +
-    'body{padding:16px}.rel{margin:0 auto}</style></head><body>' + htmlRelatorio(st.res, st.quando) + '</body></html>';
+    'body{padding:16px}.rel{margin:0 auto}</style></head><body>' + htmlRelatorio(st.res, st.quando, 0) + '</body></html>';
   var a = D.createElement('a');
   a.href = URL.createObjectURL(new Blob([doc], { type: 'text/html;charset=utf-8' }));
   a.download = 'Consulta_Reforma_relatorio_' + hojeIso() + '.html';
@@ -372,10 +413,13 @@ $('#baixar').addEventListener('click', function () {
 });
 $('#imprimir').addEventListener('click', function () { window.print(); });
 $('#nova').addEventListener('click', function () {
-  st.itens = []; st.res = [];
+  st.itens = []; st.res = []; st.faltaram = 0;
   desenharLista();
-  $('#err2').textContent = '';
-  irPara(2);
+  $('#resultado').classList.add('hide');
+  $('#relatorio').innerHTML = '';
+  errB.textContent = '';
+  $('#inicio').scrollIntoView({ block: 'start' });
+  inp.focus();
 });
 
 // ---------------------------------------------------------------

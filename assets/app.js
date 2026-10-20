@@ -4,18 +4,17 @@
 // ---------------------------------------------------------------
 // Configuração
 // O site roda só no GitHub Pages: tudo acontece no navegador e nada é gravado.
-// Situação na Receita, Simples e MEI vêm da BrasilAPI (pública e grátis).
-// api vazio = sem servidor: sem certidão automática, pagamento, e-mail ou feedback gravado.
+// Plano grátis (2 CNPJs): bom fornecedor ou não + regime, com dados públicos da BrasilAPI.
+// Análise completa (paga, quando houver servidor): certidão federal e crédito em reais.
 // precoPorCnpj: valor de EXEMPLO, até o preço ser definido.
 // ---------------------------------------------------------------
 var CONFIG = {
   gratis: 2,
   precoPorCnpj: 4.90,
   precoDefinido: false,
-  cbs: 0.088,
   api: '',
   brasilapi: 'https://brasilapi.com.br/api/cnpj/v1/',
-  certidaoReceita: 'https://servicos.receitafederal.gov.br/servico/certidoes'
+  site: 'guilhermevictaliano.github.io/consulta-reforma-site'
 };
 
 var LOGO = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="40" height="40" aria-hidden="true">' +
@@ -25,7 +24,6 @@ var LOGO = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="4
 
 var D = document;
 function $(s, c) { return (c || D).querySelector(s); }
-function $$(s, c) { return Array.prototype.slice.call((c || D).querySelectorAll(s)); }
 
 // Estado só em memória: some ao fechar ou recarregar a página.
 var st = { email: '', whats: '', itens: [], res: [], quando: null, faltaram: 0 };
@@ -47,6 +45,10 @@ function fmtDoc(d) {
 function brl(v) { return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
 function dataBr(iso) { return iso ? iso.slice(0, 10).split('-').reverse().join('/') : ''; }
 function hojeIso() { return new Date().toISOString().slice(0, 10); }
+function titulo(s) {
+  return String(s || '').toLowerCase().replace(/(^|\s)(\S)/g, function (m, a, b) { return a + b.toUpperCase(); })
+    .replace(/\s(Do|Da|De|Dos|Das|E)\s/g, function (m) { return m.toLowerCase(); });
+}
 
 function dvCnpj(base) {
   function dv(s) {
@@ -69,17 +71,6 @@ function cpfValido(d) {
   }
   return true;
 }
-function matrizDe(d) { var b = d.slice(0, 8) + '0001'; return b + dvCnpj(b); }
-
-// "120.000,00" "150000,00" "150000" "1.500" "1500.50" -> número
-function num(s) {
-  s = String(s || '').replace(/[R$\s"]/g, '');
-  if (!s) return null;
-  if (s.indexOf(',') >= 0) s = s.replace(/\./g, '').replace(',', '.');
-  else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
-  var v = parseFloat(s);
-  return isFinite(v) && v >= 0 ? v : null;
-}
 function mascara(d) {
   var partes = [2, 3, 3, 4, 2], sep = ['', '.', '.', '/', '-'], out = '', k = 0;
   for (var i = 0; i < partes.length && k < d.length; i++) { out += sep[i] + d.slice(k, k + partes[i]); k += partes[i]; }
@@ -91,21 +82,19 @@ function mascara(d) {
 // ---------------------------------------------------------------
 var inp = $('#cnpj'), errB = $('#err-busca');
 
-function adicionar(raw, valor) {
+function adicionar(raw) {
   var d = dig(raw);
   if (d.length === 14 && !cnpjValido(d)) return 'CNPJ inválido: ' + fmtDoc(d) + '. Confira os números.';
   if (d.length === 11 && !cpfValido(d)) return 'CPF inválido: ' + fmtDoc(d) + '.';
   if (d.length !== 14 && d.length !== 11) return 'Digite um CNPJ com 14 números.';
-  var ex = st.itens.filter(function (i) { return i.doc === d; })[0];
-  if (ex) { if (valor != null) ex.valor = valor; return null; }
-  st.itens.push({ doc: d, valor: valor });
+  if (!st.itens.some(function (i) { return i.doc === d; })) st.itens.push({ doc: d });
   return null;
 }
 
 // adiciona o que estiver digitado; devolve false se havia algo inválido
 function pegarDigitado() {
   if (!dig(inp.value)) return true;
-  var e = adicionar(inp.value, null);
+  var e = adicionar(inp.value);
   errB.textContent = e || '';
   if (e) { inp.focus(); return false; }
   inp.value = '';
@@ -125,9 +114,7 @@ function lerTexto(txt) {
   txt.split(/\r?\n/).forEach(function (linha) {
     var m = linha.match(RE_DOC);
     if (!m) return;
-    var resto = linha.slice(m.index + m[0].length).replace(/^[\s;,\t"]+/, '').split(/[;\t]/)[0];
-    var e = adicionar(m[0], num(resto));
-    if (e) ruins.push(fmtDoc(dig(m[0]))); else ok++;
+    if (adicionar(m[0])) ruins.push(fmtDoc(dig(m[0]))); else ok++;
   });
   var msg = '';
   if (!ok && !ruins.length) msg = 'Não encontramos nenhum CNPJ no arquivo.';
@@ -151,7 +138,7 @@ function calcPreco(n) {
 function htmlPreco(n) {
   var p = calcPreco(n);
   if (!p.extra) return '';
-  return 'Você tem <b>' + n + ' CNPJs</b>: ' + CONFIG.gratis + ' grátis + ' + p.extra + ' × ' + brl(CONFIG.precoPorCnpj) +
+  return 'Você tem <b>' + n + ' CNPJs</b>: ' + CONFIG.gratis + ' grátis + análise completa de ' + p.extra + ' × ' + brl(CONFIG.precoPorCnpj) +
     '<span class="tot">Total: ' + brl(p.total) + '</span>' +
     (CONFIG.precoDefinido ? '' : '<small>Valor de exemplo: o preço ainda está sendo definido.</small>');
 }
@@ -160,9 +147,7 @@ function desenharLista() {
   var n = st.itens.length, g = CONFIG.gratis;
   $('#lista').innerHTML = st.itens.map(function (it, i) {
     return '<li><span class="doc">' + fmtDoc(it.doc) + '</span>' +
-      '<label class="val">Compras/ano R$<input inputmode="decimal" data-i="' + i + '" placeholder="opcional" value="' +
-      (it.valor != null ? it.valor.toLocaleString('pt-BR') : '') + '" aria-label="Valor comprado no ano de ' + fmtDoc(it.doc) + ' (opcional)"></label>' +
-      '<span class="tag ' + (i < g ? 'free">Grátis' : 'paid">Pago') + '</span>' +
+      '<span class="tag ' + (i < g ? 'free">Grátis' : 'paid">Análise paga') + '</span>' +
       '<button class="rm" type="button" data-i="' + i + '" aria-label="Remover ' + fmtDoc(it.doc) + '">×</button></li>';
   }).join('');
   var pr = $('#preco'), h = htmlPreco(n);
@@ -175,10 +160,6 @@ $('#lista').addEventListener('click', function (e) {
   if (!b) return;
   st.itens.splice(+b.getAttribute('data-i'), 1);
   desenharLista();
-});
-$('#lista').addEventListener('input', function (e) {
-  var i = e.target.getAttribute('data-i');
-  if (i != null && st.itens[i]) st.itens[i].valor = num(e.target.value);
 });
 
 // ---------------------------------------------------------------
@@ -196,7 +177,7 @@ function abrirModal() {
   $('#m-ok').textContent = p.extra ? 'Ver os ' + g + ' grátis' : 'Ver resultado';
   var pg = $('#m-pagar');
   pg.classList.toggle('hide', !p.extra);
-  pg.textContent = 'Pagar ' + brl(p.total) + ' e consultar todos' + (CONFIG.api ? '' : ' · em breve');
+  pg.textContent = 'Pagar ' + brl(p.total) + ' pela análise completa' + (CONFIG.api ? '' : ' · em breve');
   pg.disabled = !CONFIG.api;
   $('#err-m').textContent = '';
   if (st.email) { $('#email').value = st.email; $('#whats').value = st.whats; $('#lgpd').checked = true; }
@@ -230,6 +211,7 @@ $('#f-contato').addEventListener('submit', function (ev) {
 
 // ---------------------------------------------------------------
 // Consulta e classificação
+// sit 1 = bom fornecedor (gera crédito) · sit 3 = não gera crédito · 'x' = não consultado
 // ---------------------------------------------------------------
 function espera(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 
@@ -251,47 +233,42 @@ function buscarCnpj(d, tentativa) {
 }
 
 var SIT = {
-  1: { ic: '✓', st: 'Em dia', acao: 'Gera crédito e está regular. Pode continuar comprando normalmente.' },
-  2: { ic: '!', st: 'Atenção', acao: 'Gera crédito, mas a Receita não emitiu a certidão federal. Peça ao fornecedor a certidão negativa de débitos (CND). Sem ela, o crédito fica em risco.' },
-  3: { ic: '✕', st: 'Não gera crédito', acao: 'Comprar deste fornecedor não dá direito a crédito integral. Avalie trocar por um fornecedor que gere crédito ou negociar um preço menor.' },
-  0: { ic: '✓', st: 'Gera crédito · confira a certidão', acao: 'As compras deste fornecedor geram crédito. Para saber se ele está em dia com a Receita, emita a certidão federal dele, grátis, no site da Receita. Se a Receita não emitir, o crédito fica em risco.' }
+  1: { ic: '✓', st: 'Bom fornecedor', sub: 'Gera crédito integral', acao: 'As compras deste fornecedor geram crédito integral de CBS/IBS. Pode continuar comprando.' },
+  3: { ic: '✕', st: 'Não gera crédito', sub: '', acao: 'Comprar deste fornecedor não dá direito a crédito integral. Avalie trocar por um fornecedor que gere crédito ou negociar um preço menor.' },
+  x: { ic: '?', st: 'Não consultado', sub: '', acao: '' }
 };
 var SITCAD = { BAIXADA: 'encerrado (baixado)', INAPTA: 'irregular (inapto)', SUSPENSA: 'suspenso', NULA: 'anulado' };
 
 function ativoAte(opcao, exclusao, hoje) { return opcao === true && (!exclusao || exclusao.slice(0, 10) > hoje); }
 
 function classificar(it, d) {
-  var r = { doc: it.doc, valor: it.valor, nome: '', local: '', det: [], nota: '' };
+  var r = { doc: it.doc, nome: '', local: '', regime: '', situacao: '', nota: '' };
   var hoje = hojeIso();
   if (it.doc.length === 11) {
     r.nome = 'Pessoa física';
-    r.sit = 3; r.motivo = 'Pessoa física (CPF): não destaca CBS/IBS';
+    r.sit = 3; r.regime = 'Pessoa física (CPF)'; r.motivo = 'Pessoa física não destaca CBS/IBS na nota';
     return r;
   }
   if (d._erro) { r.sit = 'x'; r.motivo = d._erro; r.nome = 'Não foi possível consultar'; return r; }
   r.nome = d.razao_social || '';
   if (d.nome_fantasia && d.nome_fantasia !== d.razao_social) r.fantasia = d.nome_fantasia;
-  r.local = [d.municipio, d.uf].filter(Boolean).join('/');
+  r.local = [titulo(d.municipio), d.uf].filter(Boolean).join('/');
   var sc = String(d.descricao_situacao_cadastral || '').toUpperCase();
+  r.situacao = sc ? titulo(sc) : 'Não informada';
   var mei = ativoAte(d.opcao_pelo_mei, d.data_exclusao_do_mei, hoje);
   var sim = ativoAte(d.opcao_pelo_simples, d.data_exclusao_do_simples, hoje);
-  r.det.push(['Situação na Receita', sc ? sc.charAt(0) + sc.slice(1).toLowerCase() : 'Não informada']);
-  r.det.push(['Simples Nacional', sim ? 'Sim, desde ' + dataBr(d.data_opcao_pelo_simples) : 'Não']);
-  if (mei) r.det.push(['MEI', 'Sim, desde ' + dataBr(d.data_opcao_pelo_mei)]);
   var reg = (d.regime_tributario || []).slice(-1)[0];
-  if (reg && reg.forma_de_tributacao) r.det.push(['Último regime declarado', reg.forma_de_tributacao.charAt(0) + reg.forma_de_tributacao.slice(1).toLowerCase() + ' (' + reg.ano + ')']);
-  r.certDoc = it.doc;
-  if (d.identificador_matriz_filial === 2) {
-    r.certDoc = matrizDe(it.doc);
-    r.det.push(['Filial', 'A certidão federal é a da matriz, CNPJ ' + fmtDoc(r.certDoc)]);
-  }
+  if (mei) r.regime = 'MEI (Simei), desde ' + dataBr(d.data_opcao_pelo_mei);
+  else if (sim) r.regime = 'Simples Nacional, desde ' + dataBr(d.data_opcao_pelo_simples);
+  else if (reg && reg.forma_de_tributacao) r.regime = titulo(reg.forma_de_tributacao) + ' (último ano declarado: ' + reg.ano + ')';
+  else r.regime = 'Fora do Simples (Lucro Presumido ou Real)';
 
   if (sc !== 'ATIVA') { r.sit = 3; r.motivo = 'CNPJ ' + (SITCAD[sc] || sc.toLowerCase()) + ' na Receita'; }
   else if (mei) { r.sit = 3; r.motivo = 'Microempreendedor individual (MEI)'; }
   else if (sim) {
     r.sit = 3; r.motivo = 'Empresa do Simples Nacional';
-    if (d.data_exclusao_do_simples) r.nota = 'Este fornecedor tem saída do Simples prevista para ' + dataBr(d.data_exclusao_do_simples) + '. A partir daí, pode passar a gerar crédito integral.';
-  } else { r.sit = 0; r.motivo = 'Fora do Simples (Lucro Presumido, Real ou Arbitrado)'; }
+    if (d.data_exclusao_do_simples) r.nota = 'Saída do Simples prevista para ' + dataBr(d.data_exclusao_do_simples) + '. A partir daí, pode passar a gerar crédito integral.';
+  } else { r.sit = 1; r.motivo = 'Empresa ativa, fora do Simples'; }
   return r;
 }
 
@@ -326,92 +303,181 @@ function consultar() {
   })();
 }
 
-// ---------------------------------------------------------------
-// Relatório
-// ---------------------------------------------------------------
-function htmlRelatorio(res, quando, faltaram) {
-  var cont = { 1: 0, 2: 0, 3: 0, 0: 0, x: 0 }, ok = 0, risco = 0, perde = 0, temValor = false;
-  res.forEach(function (r) {
-    cont[r.sit]++;
-    if (r.valor == null) return;
-    temValor = true;
-    var c = r.valor * CONFIG.cbs;
-    if (r.sit === 1 || r.sit === 0) ok += c; else if (r.sit === 2) risco += c; else if (r.sit === 3) perde += c;
-  });
-  var dt = quando.toLocaleDateString('pt-BR') + ' às ' + quando.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  var h = '<div class="rel"><div class="rel-head" style="display:flex;gap:14px;align-items:center">' + LOGO +
-    '<div><h3>Relatório de fornecedores</h3><p>Consulta Reforma · ' + res.length + ' fornecedor(es) · ' + dt + '</p></div></div>';
-
-  h += '<div class="kpis">' +
-    '<div class="kpi" style="--c:var(--g)"><b>' + (cont[1] + cont[0]) + '</b><small>geram crédito</small></div>' +
-    (cont[2] ? '<div class="kpi" style="--c:var(--y)"><b>' + cont[2] + '</b><small>com pendência</small></div>' : '') +
-    '<div class="kpi" style="--c:var(--r)"><b>' + cont[3] + '</b><small>não geram crédito</small></div>';
-  if (temValor) {
-    h += '<div class="kpi" style="--c:var(--g)"><b>' + brl(ok) + '</b><small>crédito estimado por ano' + (cont[0] ? ' (confira as certidões)' : '') + '</small></div>' +
-      (risco ? '<div class="kpi" style="--c:var(--y)"><b>' + brl(risco) + '</b><small>crédito em risco por ano</small></div>' : '') +
-      '<div class="kpi" style="--c:var(--r)"><b>' + brl(perde) + '</b><small>crédito que você deixa de ter por ano</small></div>';
-  }
-  h += '</div>';
-  if (faltaram) h += '<p class="aprox no-print">' + faltaram + ' CNPJ(s) da sua lista não entraram nesta consulta grátis. Eles serão consultados quando o pagamento estiver disponível.</p>';
-
-  var ordem = { 3: 0, 2: 1, 0: 2, 1: 3, x: 4 };
-  res.slice().sort(function (a, b) { return ordem[a.sit] - ordem[b.sit] || (b.valor || 0) - (a.valor || 0); }).forEach(function (r) {
-    var s = r.sit === 'x' ? 's0' : 's' + r.sit, inf = SIT[r.sit === 'x' ? 0 : r.sit];
-    var ic = r.sit === 'x' ? '?' : inf.ic, stx = r.sit === 'x' ? 'Não consultado' : inf.st, acao = r.sit === 'x' ? r.motivo : inf.acao;
-    var dl = [['CNPJ/CPF', fmtDoc(r.doc)]];
-    if (r.fantasia) dl.push(['Nome fantasia', r.fantasia]);
-    if (r.local) dl.push(['Cidade', r.local]);
-    if (r.sit !== 'x') dl.push(['Motivo', r.motivo]);
-    dl = dl.concat(r.det);
-    if (r.valor != null) {
-      dl.push(['Compras por ano', brl(r.valor)]);
-      var c = brl(r.valor * CONFIG.cbs);
-      if (r.sit === 3) dl.push(['Crédito que você deixa de ter', c + ' por ano']);
-      else if (r.sit === 2) dl.push(['Crédito em risco', c + ' por ano']);
-      else if (r.sit !== 'x') dl.push(['Crédito estimado', c + ' por ano']);
-    }
-    var cert = r.sit === 0
-      ? '<p class="no-print"><a class="btn sm" href="' + CONFIG.certidaoReceita + '" target="_blank" rel="noopener">Emitir a certidão no site da Receita ›</a> <span class="mu small">Use o CNPJ ' + fmtDoc(r.certDoc) + '</span></p>'
-      : '';
-    h += '<article class="fc ' + (r.sit === 0 ? 's1' : s) + '"><div class="fc-h"><span class="ic">' + ic + '</span><div class="t"><b>' + esc(r.nome) + '</b>' +
-      '<span class="st">' + esc(stx) + '</span></div></div>' +
-      '<p class="ac">' + esc(acao) + '</p>' + cert + (r.nota ? '<p class="mu">' + esc(r.nota) + '</p>' : '') +
-      '<dl>' + dl.map(function (x) { return '<dt>' + esc(x[0]) + '</dt><dd>' + esc(x[1]) + '</dd>'; }).join('') + '</dl></article>';
-  });
-
-  h += '<p class="aprox"><b>Valores aproximados.</b> O crédito usa a alíquota da CBS prevista para 2027, cerca de 8,8%, que ainda pode mudar, ' +
-    'sobre o valor de compras informado, sem separar produtos com alíquota reduzida. Situação cadastral, Simples e MEI: dados públicos da Receita Federal. ' +
-    'Este relatório não substitui a orientação do seu contador.</p></div>';
-  return h;
+function ordenados(res) {
+  var ordem = { 3: 0, 1: 1, x: 2 };
+  return res.slice().sort(function (a, b) { return ordem[a.sit] - ordem[b.sit]; });
+}
+function contar(res) {
+  var c = { 1: 0, 3: 0, x: 0 };
+  res.forEach(function (r) { c[r.sit]++; });
+  return c;
+}
+function campos(r) {
+  var f = [['CNPJ/CPF', fmtDoc(r.doc)]];
+  if (r.fantasia) f.push(['Nome fantasia', r.fantasia]);
+  if (r.regime) f.push(['Regime', r.regime]);
+  if (r.situacao) f.push(['Situação na Receita', r.situacao]);
+  if (r.local) f.push(['Cidade', r.local]);
+  if (r.sit !== 'x') f.push(['Motivo', r.motivo]);
+  return f;
 }
 
+// ---------------------------------------------------------------
+// Relatório na tela
+// ---------------------------------------------------------------
 function mostrarRelatorio() {
-  $('#relatorio').innerHTML = htmlRelatorio(st.res, st.quando, st.faltaram);
+  var c = contar(st.res);
+  var dt = st.quando.toLocaleDateString('pt-BR') + ' às ' + st.quando.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  var h = '<div class="rel"><div class="rel-head" style="display:flex;gap:14px;align-items:center">' + LOGO +
+    '<div><h3>Seus fornecedores</h3><p>Consulta grátis · ' + st.res.length + ' fornecedor(es) · ' + dt + '</p></div></div>' +
+    '<div class="kpis"><div class="kpi" style="--c:var(--g)"><b>' + c[1] + '</b><small>bons fornecedores (geram crédito)</small></div>' +
+    '<div class="kpi" style="--c:var(--r)"><b>' + c[3] + '</b><small>não geram crédito</small></div></div>';
+  if (st.faltaram) h += '<p class="aprox">' + st.faltaram + ' CNPJ(s) da sua lista ficaram para a análise completa, que vai ser liberada com o pagamento.</p>';
+  ordenados(st.res).forEach(function (r) {
+    var inf = SIT[r.sit], s = r.sit === 'x' ? 's0' : 's' + r.sit;
+    var acao = r.sit === 'x' ? r.motivo : inf.acao;
+    h += '<article class="fc ' + s + '"><div class="fc-h"><span class="ic">' + inf.ic + '</span><div class="t"><b>' + esc(r.nome) + '</b>' +
+      '<span class="st">' + esc(inf.st) + '</span></div></div>' +
+      '<p class="ac">' + esc(acao) + '</p>' + (r.nota ? '<p class="mu">' + esc(r.nota) + '</p>' : '') +
+      '<dl>' + campos(r).map(function (x) { return '<dt>' + esc(x[0]) + '</dt><dd>' + esc(x[1]) + '</dd>'; }).join('') + '</dl></article>';
+  });
+  h += '<p class="aprox"><b>Quer saber quanto crédito você perde?</b> A análise completa traz a certidão federal de cada fornecedor e o crédito em reais, ' +
+    'calculado com as suas compras. Em breve, com o relatório entregue no seu WhatsApp e e-mail.</p></div>';
+  $('#relatorio').innerHTML = h;
   $('#rel-actions').classList.remove('hide');
-  $('#aviso-rel').textContent = 'Esta consulta não fica guardada: ao fechar a página, ela é apagada. Use Baixar relatório para guardar uma cópia.';
+  $('#aviso-rel').textContent = 'Esta consulta não fica guardada: ao fechar a página, ela é apagada. Baixe o PDF para guardar uma cópia.';
   $('#resultado').scrollIntoView({ block: 'start' });
 }
 
-function cssDaPagina() {
-  var out = '';
-  try {
-    $$('link[rel=stylesheet]').forEach(function (l) {
-      Array.prototype.forEach.call(l.sheet.cssRules, function (r) { if (!/^@media print/.test(r.cssText)) out += r.cssText + '\n'; });
+// ---------------------------------------------------------------
+// Relatório em PDF, com marca d'água
+// ---------------------------------------------------------------
+var COR = { navy: [11, 37, 69], blue: [19, 99, 223], g: [18, 161, 80], r: [208, 57, 46], n: [91, 107, 133], mu: [82, 96, 122], bd: [217, 225, 236], bg: [245, 247, 251] };
+
+function svgParaPng(svg, px) {
+  return new Promise(function (ok) {
+    var img = new Image();
+    img.onload = function () {
+      var c = D.createElement('canvas');
+      c.width = c.height = px;
+      c.getContext('2d').drawImage(img, 0, 0, px, px);
+      ok(c.toDataURL('image/png'));
+    };
+    img.onerror = function () { ok(null); };
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  });
+}
+
+function gerarPdf(logo) {
+  var doc = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4' });
+  var W = 210, H = 297, M = 15, CW = W - 2 * M, y;
+  var dt = st.quando.toLocaleDateString('pt-BR') + ' às ' + st.quando.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  function cor(c, tipo) { doc['set' + tipo + 'Color'](c[0], c[1], c[2]); }
+
+  function cabecalho() {
+    cor(COR.navy, 'Fill'); doc.rect(0, 0, W, 30, 'F');
+    cor(COR.blue, 'Fill'); doc.rect(0, 30, W, 1.2, 'F');
+    if (logo) doc.addImage(logo, 'PNG', M, 6, 18, 18);
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.text('Consulta Reforma', M + 22, 14.5);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(201, 214, 234);
+    doc.text('Relatório de fornecedores · consulta grátis', M + 22, 21);
+    doc.text(dt, W - M, 14.5, { align: 'right' });
+    y = 42;
+  }
+  function novaPagina() { doc.addPage(); cabecalho(); }
+  function cabe(h) { if (y + h > H - 22) novaPagina(); }
+
+  cabecalho();
+  var c = contar(st.res);
+  doc.setTextColor.apply(doc, COR.navy);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.text('Resumo', M, y); y += 7;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5); cor(COR.mu, 'Text');
+  var resumo = doc.splitTextToSize('Com a Reforma Tributária, a empresa só desconta a CBS e o IBS das compras feitas de fornecedores que geram crédito. ' +
+    'Veja abaixo a situação de cada fornecedor consultado.', CW);
+  doc.text(resumo, M, y); y += resumo.length * 5 + 3;
+  var bw = (CW - 6) / 2;
+  [[COR.g, c[1], 'bons fornecedores (geram crédito)'], [COR.r, c[3], 'não geram crédito']].forEach(function (k, i) {
+    var x = M + i * (bw + 6);
+    cor(COR.bg, 'Fill'); cor(COR.bd, 'Draw'); doc.setLineWidth(0.3); doc.roundedRect(x, y, bw, 20, 2.5, 2.5, 'FD');
+    cor(k[0], 'Fill'); doc.rect(x, y, bw, 1.6, 'F');
+    cor(COR.navy, 'Text'); doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.text(String(k[1]), x + 5, y + 11);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); cor(COR.mu, 'Text'); doc.text(k[2], x + 5, y + 16.5);
+  });
+  y += 28;
+  if (st.faltaram) {
+    doc.setFontSize(9.5); cor(COR.mu, 'Text');
+    var f = doc.splitTextToSize(st.faltaram + ' CNPJ(s) da sua lista ficaram para a análise completa (paga), que não faz parte deste relatório.', CW);
+    doc.text(f, M, y); y += f.length * 4.6 + 3;
+  }
+
+  ordenados(st.res).forEach(function (r) {
+    var inf = SIT[r.sit], cc = r.sit === 1 ? COR.g : r.sit === 3 ? COR.r : COR.n, tx = CW - 22;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
+    var nome = doc.splitTextToSize(r.nome, tx);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5);
+    var acao = doc.splitTextToSize(r.sit === 'x' ? r.motivo : inf.acao, tx);
+    var nota = r.nota ? doc.splitTextToSize(r.nota, tx) : [];
+    var linhas = campos(r).map(function (k) { return [k[0], doc.splitTextToSize(k[1], tx - 38)]; });
+    var hc = 9 + nome.length * 5.2 + 6 + acao.length * 4.4 + 2 + nota.length * 4.4 +
+      (nota.length ? 2 : 0) + linhas.reduce(function (s, k) { return s + k[1].length * 4.4 + 0.8; }, 0) + 1;
+    cabe(hc);
+    cor([255, 255, 255], 'Fill'); cor(COR.bd, 'Draw'); doc.setLineWidth(0.3); doc.roundedRect(M, y, CW, hc, 2.5, 2.5, 'FD');
+    cor(cc, 'Fill'); doc.rect(M, y, 2.2, hc, 'F');
+    var cx = M + 10, cy = y + 9;
+    doc.circle(cx, cy, 4.2, 'F');
+    doc.setDrawColor(255, 255, 255); doc.setLineWidth(0.9);
+    if (r.sit === 1) doc.lines([[1.5, 1.6], [3, -3.4]], cx - 2.2, cy + 0.1);
+    else if (r.sit === 3) { doc.line(cx - 1.7, cy - 1.7, cx + 1.7, cy + 1.7); doc.line(cx + 1.7, cy - 1.7, cx - 1.7, cy + 1.7); }
+    else { doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(255, 255, 255); doc.text('?', cx, cy + 1.3, { align: 'center' }); }
+    var x = M + 18, yy = y + 8;
+    cor(COR.navy, 'Text'); doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.text(nome, x, yy); yy += nome.length * 5.2;
+    cor(cc, 'Text'); doc.setFontSize(10); doc.text(inf.st + (inf.sub ? ' · ' + inf.sub : ''), x, yy); yy += 6;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); cor(COR.navy, 'Text'); doc.text(acao, x, yy); yy += acao.length * 4.4 + 2;
+    if (nota.length) { cor(COR.mu, 'Text'); doc.text(nota, x, yy); yy += nota.length * 4.4 + 2; }
+    linhas.forEach(function (k) {
+      doc.setFontSize(9); cor(COR.mu, 'Text'); doc.text(k[0], x, yy);
+      cor(COR.navy, 'Text'); doc.text(k[1], x + 38, yy);
+      yy += k[1].length * 4.4 + 0.8;
     });
-  } catch (e) { out = ''; }
-  return out;
+    y += hc + 4;
+  });
+
+  var up = doc.splitTextToSize('Quer saber quanto crédito você perde? A análise completa traz a certidão federal de cada fornecedor e o crédito em reais, ' +
+    'calculado com as suas compras, com o relatório entregue no seu WhatsApp e e-mail. Saiba mais em ' + CONFIG.site + '.', CW - 10);
+  var hu = up.length * 4.6 + 8;
+  cabe(hu);
+  doc.setFillColor(232, 241, 255); doc.roundedRect(M, y, CW, hu, 2.5, 2.5, 'F');
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); cor(COR.navy, 'Text'); doc.text(up, M + 5, y + 6.5);
+
+  // rodapé e marca d'água em todas as páginas
+  var n = doc.getNumberOfPages(), wm = 'CONSULTA REFORMA', ang = 42, rad = ang * Math.PI / 180;
+  for (var p = 1; p <= n; p++) {
+    doc.setPage(p);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); cor(COR.mu, 'Text');
+    var disc = doc.splitTextToSize('Classificação com base em dados públicos da Receita Federal na data da consulta. Fora do Simples e CNPJ ativo = gera crédito integral; ' +
+      'Simples, MEI, pessoa física ou CNPJ irregular = não gera crédito integral. Não substitui a orientação do seu contador. Gerado para ' + st.email + '.', CW - 22);
+    doc.text(disc, M, H - 13);
+    doc.text('Página ' + p + ' de ' + n, W - M, H - 13, { align: 'right' });
+    doc.setGState(new doc.GState({ opacity: 0.07 }));
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(64); cor(COR.navy, 'Text');
+    var ww = doc.getTextWidth(wm);
+    doc.text(wm, W / 2 - ww / 2 * Math.cos(rad), H / 2 + ww / 2 * Math.sin(rad), { angle: ang });
+    if (logo) doc.addImage(logo, 'PNG', W / 2 - 22, H / 2 + 38, 44, 44);
+    doc.setGState(new doc.GState({ opacity: 1 }));
+  }
+  doc.save('Consulta_Reforma_relatorio_' + hojeIso() + '.pdf');
 }
 
 $('#baixar').addEventListener('click', function () {
-  var doc = '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">' +
-    '<title>Consulta Reforma · relatório de fornecedores</title><style>' + cssDaPagina() +
-    'body{padding:16px}.rel{margin:0 auto}</style></head><body>' + htmlRelatorio(st.res, st.quando, 0) + '</body></html>';
-  var a = D.createElement('a');
-  a.href = URL.createObjectURL(new Blob([doc], { type: 'text/html;charset=utf-8' }));
-  a.download = 'Consulta_Reforma_relatorio_' + hojeIso() + '.html';
-  D.body.appendChild(a); a.click(); a.remove();
+  var b = this;
+  if (!window.jspdf) { $('#aviso-rel').textContent = 'Não foi possível gerar o PDF agora. Recarregue a página e tente de novo.'; return; }
+  b.disabled = true; b.textContent = 'Gerando PDF…';
+  svgParaPng(LOGO.replace('width="40" height="40"', 'width="256" height="256"'), 256).then(function (logo) {
+    try { gerarPdf(logo); } catch (e) { $('#aviso-rel').textContent = 'Não foi possível gerar o PDF. Tente de novo.'; }
+    b.disabled = false; b.textContent = 'Baixar relatório em PDF';
+  });
 });
-$('#imprimir').addEventListener('click', function () { window.print(); });
 $('#nova').addEventListener('click', function () {
   st.itens = []; st.res = []; st.faltaram = 0;
   desenharLista();

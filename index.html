@@ -31,7 +31,7 @@
   <div class="wrap">
     <p class="kicker">Reforma Tributária · CBS e IBS a partir de 2027</p>
     <h1>Seus fornecedores vão gerar <span>crédito de imposto</span>?</h1>
-    <p class="lead">Digite o CNPJ do fornecedor e descubra na hora. Os 2 primeiros são grátis.</p>
+    <p class="lead">Digite o CNPJ e descubra na hora se ele é um bom fornecedor para a Reforma e qual é o regime dele. Os 2 primeiros são grátis.</p>
 
     <form id="busca" class="busca" novalidate>
       <label for="cnpj" class="vh">CNPJ do fornecedor</label>
@@ -47,13 +47,12 @@
         <button type="submit" class="btn big" id="go">Consultar</button>
         <label class="btn ghost big file">Enviar lista (CSV ou TXT)<input type="file" id="arq" accept=".csv,.txt,text/csv,text/plain"></label>
       </div>
-      <p class="hint">Use o <b>+</b> para adicionar mais de um fornecedor. Na lista, um CNPJ por linha (se quiser, com o valor comprado no ano depois de <code>;</code>).</p>
+      <p class="hint">Use o <b>+</b> para adicionar mais de um fornecedor. Na lista, um CNPJ por linha.</p>
     </form>
 
     <ul class="sem" aria-label="Legenda das cores">
-      <li class="s1"><span class="ic">✓</span><b>Em dia</b> gera crédito e está regular</li>
-      <li class="s2"><span class="ic">!</span><b>Atenção</b> gera crédito, mas tem pendência</li>
-      <li class="s3"><span class="ic">✕</span><b>Não gera crédito</b> Simples, MEI, CNPJ irregular</li>
+      <li class="s1"><span class="ic">✓</span><b>Bom fornecedor</b> gera crédito: fora do Simples e com CNPJ ativo</li>
+      <li class="s3"><span class="ic">✕</span><b>Não gera crédito</b> Simples, MEI, pessoa física ou CNPJ irregular</li>
     </ul>
   </div>
 </section>
@@ -64,9 +63,8 @@
   <div id="progresso" class="card prog hide"><div class="bar"><i></i></div><p></p></div>
   <div id="relatorio"></div>
   <div class="actions hide" id="rel-actions">
-    <button class="btn big" type="button" id="baixar">Baixar relatório</button>
-    <button class="btn ghost" type="button" id="imprimir">Imprimir ou salvar em PDF</button>
-    <button class="btn ghost" type="button" id="nova">Nova consulta</button>
+    <button class="btn big" type="button" id="baixar">Baixar relatório em PDF</button>
+    <button class="btn ghost big" type="button" id="nova">Nova consulta</button>
   </div>
   <p class="mu small" id="aviso-rel"></p>
  </div>
@@ -78,8 +76,18 @@
   <ol class="steps">
     <li><span>1</span><b>Digite o CNPJ</b><p>No campo de busca lá em cima. Use o <b>+</b> para mais de um fornecedor, ou envie uma lista em CSV ou TXT.</p></li>
     <li><span>2</span><b>Informe seu contato</b><p>E-mail e WhatsApp, e aceite os termos. Os 2 primeiros CNPJs são grátis; acima disso, mostramos o valor antes.</p></li>
-    <li><span>3</span><b>Veja o resultado</b><p>Na hora: situação na Receita, Simples, MEI e o crédito estimado. Baixe o relatório para guardar.</p></li>
+    <li><span>3</span><b>Veja o resultado</b><p>Na hora: se cada fornecedor gera crédito e qual é o regime dele. Baixe o relatório em PDF.</p></li>
   </ol>
+  <div class="planos">
+    <div class="plano">
+      <b>Grátis</b><span class="pz">2 CNPJs</span>
+      <ul><li>Bom fornecedor ou não (gera crédito?)</li><li>Regime: Simples, MEI, Lucro Presumido ou Real</li><li>Situação do CNPJ na Receita</li><li>Relatório em PDF</li></ul>
+    </div>
+    <div class="plano pro">
+      <b>Análise completa</b><span class="pz">em breve</span>
+      <ul><li>Quantos CNPJs você quiser</li><li>Certidão federal de cada fornecedor</li><li>Crédito em reais, com base nas suas compras</li><li>Relatório no WhatsApp e no e-mail</li></ul>
+    </div>
+  </div>
   <p class="mu small">Sua consulta fica só no seu navegador. Ao fechar a página, ela é apagada.</p>
 </section>
 
@@ -126,9 +134,9 @@
   <h2>Termos de uso e privacidade</h2>
   <ul class="termos">
     <li><b>O que é a consulta.</b> Mostramos, com base em dados públicos da Receita Federal, se as compras de cada fornecedor tendem a gerar crédito de CBS/IBS na Reforma Tributária.</li>
-    <li><b>Estimativa.</b> O crédito usa a alíquota da CBS prevista para 2027 (cerca de 8,8%), que ainda pode mudar, sobre o valor de compras que você informar. Não separa produtos com alíquota reduzida. Não substitui a orientação do seu contador.</li>
+    <li><b>Orientação.</b> A classificação segue a regra geral da Reforma: fornecedores fora do Simples, com CNPJ ativo, geram crédito integral; Simples, MEI, pessoa física e CNPJ irregular não geram crédito integral. Não substitui a orientação do seu contador.</li>
     <li><b>Seus dados.</b> A consulta acontece no seu navegador. Os CNPJs são enviados apenas à base pública de CNPJ (BrasilAPI) para buscar a situação de cada empresa. Nesta versão, não gravamos sua consulta, seu e-mail ou seu WhatsApp: ao fechar a página, tudo é apagado. Baixe o relatório para guardar.</li>
-    <li><b>Grátis e pago.</b> Os 2 primeiros CNPJs de cada consulta são grátis. Acima disso, o valor aparece antes de você confirmar.</li>
+    <li><b>Grátis e pago.</b> Os 2 primeiros CNPJs de cada consulta são grátis e mostram se o fornecedor gera crédito e o regime dele. A análise completa (mais CNPJs, certidão federal e crédito em reais) é paga, e o valor aparece antes de você confirmar.</li>
   </ul>
 </section>
 </main>
@@ -158,6 +166,7 @@
   </form>
 </dialog>
 
+<script src="assets/vendor/jspdf.umd.min.js"></script>
 <script src="assets/app.js"></script>
 </body>
 </html>
